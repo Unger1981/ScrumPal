@@ -1,0 +1,9 @@
+Fast API
+uvicorn
+PostgreSQL
+SQLAlchemy
+python-dotenv
+Pydantic
+PyJWT
+passlib
+
