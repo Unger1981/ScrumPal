@@ -32,7 +32,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Token Ablaufzeit in Minuten
 
 # Pydantic Models
 class UserRegister(BaseModel):
-    username: str
     email: str
     password: str
 
@@ -60,7 +59,7 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
     hashed_password = pwd_context.hash(user.password)
-    new_user = AuthUser(email=user.email, password_hash=hashed_password)
+    new_user = AuthUser(email=user.email, password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
