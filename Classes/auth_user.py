@@ -3,13 +3,15 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base
 from passlib.context import CryptContext
 
+import sys
+print(sys.path)  # Gibt die Suchpfade aus, um zu sehen, ob Classes enthalten ist
 # SQLAlchemy-Base definieren
 Base = declarative_base()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class AuthUser(Base):
-    __tablename__ = 'auth_users'
+    __tablename__ = 'Auth_users'
 
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
@@ -17,8 +19,7 @@ class AuthUser(Base):
     password_hash = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)  # Automatisch gesetzt
 
-    def __init__(self, username: str, email: str, password: str):
-        self.username = username
+    def __init__(self,  email: str, password: str):
         self.email = email
         self.password_hash = pwd_context.hash(password)
 
@@ -35,10 +36,10 @@ class AuthUser(Base):
 
     def __repr__(self):
         """Dunder method to represent the object as a string"""
-        return f"AuthUser(username={self.username}, email={self.email}, created_at={self.created_at})"
+        return f"email={self.email}, created_at={self.created_at})"
 
 
-user = AuthUser("testuser", "test@example.com", "geheim123")
+user = AuthUser("test@example.com", "geheim123")
 
 print(user.verify_password("geheim123"))  # True
 print(user.verify_password("falsch"))  # False

@@ -1,0 +1,27 @@
+# Bytecode-Cache-Dateien
+__pycache__/
+*.py[cod]
+
+# Virtuelle Umgebungen
+venv/
+.env
+
+# Editor- und OS-spezifische Dateien
+.vscode/
+.idea/
+.DS_Store
+
+# Logs und temporäre Dateien
+*.log
+tmp/
+
+# Datenbank-Dateien
+*.sqlite3
+
+# Abhängigkeiten (falls vorhanden)
+*.egg-info/
+dist/
+build/
+
+# Git-spezifische Dateien
+.git/
