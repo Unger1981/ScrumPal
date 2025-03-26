@@ -1,27 +1,27 @@
-# Bytecode-Cache-Dateien
+# Bytecode-Cache-files
 __pycache__/
 *.py[cod]
 
-# Virtuelle Umgebungen
+# virtual environment
 venv/
 .env
 
-# Editor- und OS-spezifische Dateien
+# Editor- and os specific files
 .vscode/
 .idea/
 .DS_Store
 
-# Logs und temporäre Dateien
+# Logs and temp files
 *.log
 tmp/
 
-# Datenbank-Dateien
+# Database files
 *.sqlite3
 
-# Abhängigkeiten (falls vorhanden)
+# Dependencies
 *.egg-info/
 dist/
 build/
 
-# Git-spezifische Dateien
+# Git-specific files
 .git/
