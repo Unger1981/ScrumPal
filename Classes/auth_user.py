@@ -1,22 +1,21 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 from passlib.context import CryptContext
-
-import sys
-
-Base = declarative_base()
+from database import Base
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class AuthUser(Base):
     """Model representing an authenticated user."""
-    __tablename__ = 'Auth_users'
+    __tablename__ = 'auth_users'
 
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Relatio User !!!!! Dont forget next time idiot
+    users = relationship('User', back_populates='auth_user') 
 
     def verify_password(self, password: str) -> bool:
         """Verify if the given password matches the stored password hash."""

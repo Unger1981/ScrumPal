@@ -1,10 +1,11 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 from passlib.context import CryptContext
+from Classes.auth_user import AuthUser
+from database import Base
 
 import sys
-
 
 class User(Base):
     """Model representing a user profile."""
@@ -17,4 +18,6 @@ class User(Base):
     user_type = Column(String(100), default='Member')
     auth_user_id = Column(Integer, ForeignKey('auth_users.id'), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-   
+    auth_user_id = Column(Integer, ForeignKey('auth_users.id'))  # Verknüpfung zur Tabelle auth_users
+
+    auth_user = relationship('AuthUser', back_populates='users')  # Die Beziehung zu AuthUser
