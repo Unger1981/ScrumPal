@@ -17,9 +17,9 @@ load_dotenv()
 app = FastAPI()
 
 # Init database
-#init_db()   !!! Potential function to check wheater DB exist or not. Clarify with Michal
+init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
 
-# Pydantic-Modelle
+# Pydantic-Modelle  Refactor into an own module
 class RegisterUser(BaseModel):
     email: str
     password: str
@@ -45,9 +45,9 @@ def get_db():
     finally:
         db.close()  
 
-# Registrierungs-Endpunkt
 @app.post("/register")
 def register(user: RegisterUser, db: Session = Depends(get_db)):
+    """Register a new user."""
     existing_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
@@ -58,11 +58,11 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"message": "User registered successfully"}
 
-# Login-Endpunkt
+
 @app.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
+    """Login and return an access token."""
     db_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
-    
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -74,17 +74,14 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(token_data)
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Benutzererstellung für Admins
+
 @app.post("/create_user")
 def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    # Verifiziere den Token
+    """Create a new user."""
     user_info = verify_token(token)
-    
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
-    
     db_auth_user = db.query(AuthUser).filter(AuthUser.email == user_info['sub']).first()
-    
     new_user = User(
         first_name=user.first_name,
         last_name=user.last_name,
@@ -92,7 +89,6 @@ def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Sessi
         user_type=user.user_type,  
         auth_user_id=db_auth_user.id  #Relation auth user
     )
-    # Neuen User in die DB einfügen
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -102,7 +98,7 @@ def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Sessi
 
 @app.get("/users")
 def get_users(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    # Verifiziere den Token
+    """Get all users."""                
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
