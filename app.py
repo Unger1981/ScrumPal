@@ -17,7 +17,7 @@ load_dotenv()
 app = FastAPI()
 
 # Init database
-init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
+#init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
 
 # Pydantic-Modelle  Refactor into an own module
 class RegisterUser(BaseModel):
@@ -36,6 +36,7 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
 
 # Dependency for db !!!!! Refactor to database.py soon
 def get_db():
@@ -102,10 +103,28 @@ def get_users(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
-    db_auth_user = db.query(AuthUser).filter(AuthUser.email == user_info['sub']).first()
+    db_auth_user = db.query(AuthUser).filter(
+        AuthUser.email == user_info['sub']
+    ).first()
     
     if not db_auth_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AuthUser not found")
     db_users = db.query(User).filter(User.auth_user_id == db_auth_user.id).all()
 
     return db_users
+
+@app.delete("/delete_user/{user_id}")
+def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Delete a user by ID."""
+    user_info = verify_token(token)
+    if not user_info:       
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    db_user = db.query(User).filter(
+        User.id == user_id,
+        User.email == user_info['sub']
+    ).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    db.delete(db_user)
+    db.commit()
+    return {"message": f"User with ID {user_id} successfully deleted"}
