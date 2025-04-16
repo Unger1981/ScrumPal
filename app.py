@@ -150,13 +150,17 @@ def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oa
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    new_project = Project(
-    name=project.name,
-    description=project.description,
-    created_by=user.id,  # Assuming created_by is the ID of the user creating the project
-    created_at=datetime.utcnow()
-    )
-    db.add(new_project)
-    db.commit()
-    db.refresh(new_project)
-    return new_project
+    try:
+        new_project = Project(
+        name=project.name,
+        description=project.description,
+        created_by=user.id,  # Assuming created_by is the ID of the user creating the project
+        created_at=datetime.utcnow()
+        )
+        db.add(new_project)
+        db.commit()
+        db.refresh(new_project)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error creating project")    
+    return  {"message": f"Project created"}
