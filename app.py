@@ -6,7 +6,7 @@ import os
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from Classes import AuthUser, User, pwd_context
+from Classes import AuthUser, User, Project, pwd_context
 from database import SessionLocal, init_db  # Achte darauf, dass init_db hier importiert wird
 from token_functions import create_access_token, verify_token, ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 
@@ -17,7 +17,7 @@ load_dotenv()
 app = FastAPI()
 
 # Init database
-#init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
+init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
 
 # Pydantic-Modelle  Refactor into an own module
 class RegisterUser(BaseModel):
@@ -37,6 +37,11 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class ProjectCreate(BaseModel):
+    name: str
+    description: str
+       
+
 
 # Dependency for db !!!!! Refactor to database.py soon
 def get_db():
@@ -46,7 +51,7 @@ def get_db():
     finally:
         db.close()  
 
-@app.post("/register")
+@app.post("/register",status_code=201)
 def register(user: RegisterUser, db: Session = Depends(get_db)):
     """Register a new user."""
     existing_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
@@ -76,7 +81,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.post("/create_user")
+@app.post("/create_user",status_code=201)
 def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Create a new user."""
     user_info = verify_token(token)
@@ -128,3 +133,30 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
     db.delete(db_user)
     db.commit()
     return {"message": f"User with ID {user_id} successfully deleted"}
+
+#Projects
+
+@app.post("/create_projects/{user_id}", status_code=201)
+def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Create a new project by user.id with ownership."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = db.query(User).filter(
+        User.email == user_info['sub'],
+        User.id == user_id,
+        User.user_type == 'Owner' # Assuming only Owner can create projects
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_project = Project(
+    name=project.name,
+    description=project.description,
+    created_by=user.id,  # Assuming created_by is the ID of the user creating the project
+    created_at=datetime.utcnow()
+    )
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+    return new_project
