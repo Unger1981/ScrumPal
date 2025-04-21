@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import  relationship
 from passlib.context import CryptContext
 from database import Base
 

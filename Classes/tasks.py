@@ -1,11 +1,12 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from database import Base
 
-Base = declarative_base()
+
 
 class Task(Base):
+    """Model representing a task in a project management system."""
     __tablename__ = 'tasks'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -27,4 +28,3 @@ class Task(Base):
 
     def __repr__(self):
         return f"<Task(title={self.title}, status={self.status}, created_at={self.created_at})>"
-

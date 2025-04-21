@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import os
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session  
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from Classes import AuthUser, User, Project, pwd_context
+from Classes import AuthUser, User, Project, project_members, pwd_context
 from database import SessionLocal, init_db  # Achte darauf, dass init_db hier importiert wird
 from token_functions import create_access_token, verify_token, ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 
@@ -38,8 +39,16 @@ class Token(BaseModel):
     token_type: str
 
 class ProjectCreate(BaseModel):
+    user_id: int	
     name: str
     description: str
+
+class ProjectUser(BaseModel):
+    project_id: int
+    owner_id: int    
+    new_user_id: int
+    new_user_mail: EmailStr
+  
        
 
 
@@ -50,6 +59,8 @@ def get_db():
         return db 
     finally:
         db.close()  
+
+# Login/Register
 
 @app.post("/register",status_code=201)
 def register(user: RegisterUser, db: Session = Depends(get_db)):
@@ -80,6 +91,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(token_data)
     return {"access_token": access_token, "token_type": "bearer"}
 
+# User
 
 @app.post("/create_user",status_code=201)
 def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -134,10 +146,10 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
     db.commit()
     return {"message": f"User with ID {user_id} successfully deleted"}
 
-#Projects
+# Projects
 
-@app.post("/create_projects/{user_id}", status_code=201)
-def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+@app.post("/create_projects", status_code=201)
+def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Create a new project by user.id with ownership."""
     user_info = verify_token(token)
     if not user_info:
@@ -145,7 +157,7 @@ def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oa
 
     user = db.query(User).filter(
         User.email == user_info['sub'],
-        User.id == user_id,
+        User.id == project.user_id,
         User.user_type == 'Owner' # Assuming only Owner can create projects
     ).first()
     if not user:
@@ -154,7 +166,8 @@ def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oa
         new_project = Project(
         name=project.name,
         description=project.description,
-        created_by=user.id,  # Assuming created_by is the ID of the user creating the project
+        product_owner_id=project.user_id,  # Assuming product_owner is the ID of the user creating the project	
+        created_by=project.user_id,  # Assuming created_by is the ID of the user creating the project
         created_at=datetime.utcnow()
         )
         db.add(new_project)
@@ -162,5 +175,160 @@ def create_project(user_id: int ,project: ProjectCreate, token: str = Depends(oa
         db.refresh(new_project)
     except Exception as e:
         db.rollback()
+        print(f"[ERROR] Project creation failed: {e}")
         raise HTTPException(status_code=500, detail="Error creating project")    
     return  {"message": f"Project created"}
+
+@app.get("/projects/{user_id}", status_code=200)
+def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Get all projects."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    projects = db.query(Project).filter(
+        (Project.product_owner_id == user_id) |
+        (Project.members.any(User.id == user_id))
+    ).all()
+    if not projects:        
+        raise HTTPException(status_code=404, detail="No projects found")
+    # Filter projects based on the user_id
+    projects = [project for project in projects if project.product_owner_id == user_id or user_id in [member.id for member in project.members]]
+
+    return projects
+
+@app.delete("/delete_project/{project_id}", status_code=204)
+def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Delete a project by ID."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_project = db.query(Project).filter(
+        Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db_user = db.query(User).filter(
+        User.id == db_project.product_owner_id,
+        User.email == user_info['sub']
+    ).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found with necessary permissions")
+    db.delete(db_project)
+    db.commit()
+    return {"message": f"Project with ID {project_id} successfully deleted"}    
+    
+    
+
+@app.post("/add_user_to_project", status_code=201)
+def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Add a user to a project."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_project = db.query(Project).filter(
+        Project.id == project_user.project_id,
+        Project.product_owner_id == project_user.owner_id  
+    ).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found with necessary permissions")        
+   
+    user_to_add = db.query(User).filter(
+            User.id == project_user.new_user_id,
+            User.email == project_user.new_user_mail
+        ).first()
+    if not user_to_add:
+        raise HTTPException(status_code=404, detail="User to add not found")
+    
+    existing_link = db.execute(
+        select(project_members).where(
+            project_members.c.user_id == user_to_add.id,
+            project_members.c.project_id == db_project.id
+        )
+    ).first()
+
+    if existing_link:
+        raise HTTPException(status_code=400, detail="User is already in the project")
+    try:
+               # Fixed duo to problems with duplicate check (internal 500 error)
+        db.execute(
+            project_members.insert().values(
+                user_id=user_to_add.id,
+                project_id=db_project.id
+            )
+        )
+        db.commit()
+        db.refresh(db_project)
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Adding user to project failed: {e}")
+        raise HTTPException(status_code=500, detail="Error adding user to project")    
+
+    return {"message": f"User ID {project_user.new_user_id} added to project ID {project_user.project_id}"}
+
+@app.delete("/remove_user_from_project", status_code=200)
+def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Remove a user from a project."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_project = db.query(Project).filter(
+        Project.id == project_user.project_id,
+        Project.product_owner_id == project_user.owner_id  
+    ).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found with necessary permissions")        
+    
+    user_to_remove = db.query(User).filter(
+            User.id == project_user.new_user_id,
+            User.email == project_user.new_user_mail
+        ).first()
+    if not user_to_remove:
+        raise HTTPException(status_code=404, detail="User to remove not found")
+    
+    existing_link = db.execute(
+        select(project_members).where(
+            project_members.c.user_id == user_to_remove.id,
+            project_members.c.project_id == db_project.id
+        )
+    ).first()
+
+    if not existing_link:
+        raise HTTPException(status_code=400, detail="User is not in the project")
+    
+    try:
+        db.execute(
+            project_members.delete().where(
+                project_members.c.user_id == user_to_remove.id,
+                project_members.c.project_id == db_project.id
+            )
+        )
+        db.commit()
+        db.refresh(db_project)
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Removing user from project failed: {e}")
+        raise HTTPException(status_code=500, detail="Error removing user from project")    
+
+    return {"message": f"User ID {project_user.new_user_id} removed from project ID {project_user.project_id}"}
+
+
+@app.get("/project_members/{project_id}", status_code=200)
+def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Get all members of a project."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_project = db.query(Project).filter(
+        Project.id == project_id
+    ).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        members = db.query(User).join(project_members).filter(
+            project_members.c.project_id == project_id
+        ).all()
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Fetching project members failed: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching project members")
+    
+    return members

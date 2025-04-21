@@ -1,8 +1,8 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from passlib.context import CryptContext
-from Classes.auth_user import AuthUser
+from .auth_user import AuthUser
+from .project_members import project_members
 from database import Base
 
 class User(Base):
@@ -19,6 +19,7 @@ class User(Base):
 
     # Relationship zu Projekten
     projects = relationship("Project", back_populates="creator", foreign_keys="Project.created_by")
+    projects = relationship( "Project",secondary=project_members,back_populates="members")
 
     # AuthUser-Beziehung
     auth_user = relationship('AuthUser', back_populates='users')  
