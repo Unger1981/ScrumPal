@@ -18,7 +18,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationship zu Projekten
-    projects = relationship("Project", back_populates="creator", foreign_keys="Project.created_by")
+    created_projects = relationship("Project", back_populates="creator", foreign_keys="Project.created_by")
     projects = relationship( "Project",secondary=project_members,back_populates="members")
 
     # AuthUser-Beziehung

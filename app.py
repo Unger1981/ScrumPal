@@ -1,64 +1,19 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import os
+from pydantic_models import RegisterUser, UserCreate, UserLogin, ProjectCreate, ProjectUser, TaskCreate
 from sqlalchemy import select
 from sqlalchemy.orm import Session  
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from Classes import AuthUser, User, Project, project_members, pwd_context
-from database import SessionLocal, init_db  # Achte darauf, dass init_db hier importiert wird
+from Classes import AuthUser, User, Project, project_members, Task, pwd_context
+from database import SessionLocal, init_db, get_db  # Achte darauf, dass init_db hier importiert wird
 from token_functions import create_access_token, verify_token, ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme
-
-
-load_dotenv()
-
 
 app = FastAPI()
 
 # Init database
 init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
-
-# Pydantic-Modelle  Refactor into an own module
-class RegisterUser(BaseModel):
-    email: str
-    password: str
-
-class UserCreate(BaseModel):
-    first_name: str
-    last_name: str
-    user_type: str
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class ProjectCreate(BaseModel):
-    user_id: int	
-    name: str
-    description: str
-
-class ProjectUser(BaseModel):
-    project_id: int
-    owner_id: int    
-    new_user_id: int
-    new_user_mail: EmailStr
-  
-       
-
-
-# Dependency for db !!!!! Refactor to database.py soon
-def get_db():
-    db = SessionLocal()  
-    try:
-        return db 
-    finally:
-        db.close()  
 
 # Login/Register
 
@@ -103,9 +58,9 @@ def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Sessi
     new_user = User(
         first_name=user.first_name,
         last_name=user.last_name,
-        email=db_auth_user.email,  # E-Mail stuck to auth user email
+        email=db_auth_user.email, 
         user_type=user.user_type,  
-        auth_user_id=db_auth_user.id  #Relation auth user
+        auth_user_id=db_auth_user.id  
     )
     db.add(new_user)
     db.commit()
@@ -123,12 +78,12 @@ def get_users(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
     db_auth_user = db.query(AuthUser).filter(
         AuthUser.email == user_info['sub']
     ).first()
-    
     if not db_auth_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AuthUser not found")
     db_users = db.query(User).filter(User.auth_user_id == db_auth_user.id).all()
 
     return db_users
+
 
 @app.delete("/delete_user/{user_id}")
 def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -142,9 +97,14 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
     ).first()
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    db.delete(db_user)
-    db.commit()
-    return {"message": f"User with ID {user_id} successfully deleted"}
+    try:
+        db.delete(db_user)
+        db.commit()
+        return {"message": f"User with ID {user_id} successfully deleted"}
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] User deletion failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting user")
 
 # Projects
 
@@ -158,7 +118,7 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
     user = db.query(User).filter(
         User.email == user_info['sub'],
         User.id == project.user_id,
-        User.user_type == 'Owner' # Assuming only Owner can create projects
+        User.user_type == 'Owner'
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -166,8 +126,7 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
         new_project = Project(
         name=project.name,
         description=project.description,
-        product_owner_id=project.user_id,  # Assuming product_owner is the ID of the user creating the project	
-        created_by=project.user_id,  # Assuming created_by is the ID of the user creating the project
+        product_owner_id=project.user_id, 
         created_at=datetime.utcnow()
         )
         db.add(new_project)
@@ -177,7 +136,8 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
         db.rollback()
         print(f"[ERROR] Project creation failed: {e}")
         raise HTTPException(status_code=500, detail="Error creating project")    
-    return  {"message": f"Project created"}
+    return  {"message": f"Project created successfully", "project_id": new_project.id}
+
 
 @app.get("/projects/{user_id}", status_code=200)
 def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -191,10 +151,9 @@ def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session =
     ).all()
     if not projects:        
         raise HTTPException(status_code=404, detail="No projects found")
-    # Filter projects based on the user_id
     projects = [project for project in projects if project.product_owner_id == user_id or user_id in [member.id for member in project.members]]
-
     return projects
+
 
 @app.delete("/delete_project/{project_id}", status_code=204)
 def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -216,7 +175,7 @@ def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Ses
     db.commit()
     return {"message": f"Project with ID {project_id} successfully deleted"}    
     
-    
+    # Project Members Junction Table
 
 @app.post("/add_user_to_project", status_code=201)
 def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -264,6 +223,7 @@ def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_sc
 
     return {"message": f"User ID {project_user.new_user_id} added to project ID {project_user.project_id}"}
 
+
 @app.delete("/remove_user_from_project", status_code=200)
 def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Remove a user from a project."""
@@ -299,8 +259,8 @@ def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oaut
             project_members.delete().where(
                 project_members.c.user_id == user_to_remove.id,
                 project_members.c.project_id == db_project.id
-            )
-        )
+                                          )
+                    )
         db.commit()
         db.refresh(db_project)
     except Exception as e:
@@ -326,9 +286,103 @@ def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db
         members = db.query(User).join(project_members).filter(
             project_members.c.project_id == project_id
         ).all()
+        owner = db.query(User).filter(
+            User.id == db_project.product_owner_id
+        ).first()
+        if owner:
+            members.append(owner)  # Add the owner to the list of members
     except Exception as e:
         db.rollback()
         print(f"[ERROR] Fetching project members failed: {e}")
         raise HTTPException(status_code=500, detail="Error fetching project members")
     
     return members
+
+
+@app.post("/create_task", status_code=201)          
+def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Create a new task."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_project = db.query(Project).filter(
+        Project.id == task.project_id, 
+    ).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if db_project.product_owner_id == task.created_by and task.type == "Backlog" or task.type == "Sprint":
+        try:
+            create_task_entity(task.type, task, db)
+        except Exception as e:
+            db.rollback()
+            print(f"[ERROR] Task creation failed: {e}")
+            raise HTTPException(status_code=500, detail="Error creating task")    
+    is_member =db.execute(
+        select(project_members).where(
+            project_members.c.user_id == task.created_by,
+            project_members.c.project_id == db_project.id,
+            project_members.c.email == user_info['sub']
+        )
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="User is not a member of the project or product owner")
+    if is_member and task.type == "Task" and task.parent_task_id is not None:
+        try:
+           create_task_entity(task.type, task, db)
+           return {"message": f"Task created successfully", "task_id": task.id}
+        except Exception as e:      
+            db.rollback()
+            print(f"[ERROR] Task creation failed: {e}")
+            raise HTTPException(status_code=500, detail="Error creating task")
+    else:
+        raise HTTPException(status_code=403, detail="User is not a member of the project or product owner")
+    
+
+    
+    
+@app.get("/tasks/{user_id}", status_code=200)
+def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Get all tasks of a user."""
+    try:
+        user_info = verify_token(token)
+        if not user_info:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        db_user = db.query(User).filter(
+            User.email == user_info['sub'],
+            User.id == user_id	
+        ).first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="No User found")
+        db_tasks = db.query(Task).filter(
+            (Task.assigned_to == user_id) |
+            (Task.created_by == user_id)
+        ).all()
+        return db_tasks
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Fetching tasks failed: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching tasks")
+    
+
+
+    
+def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
+        """Create a new task entity in db dependign on type."""
+        new_task = Task(
+            title=task.title,
+            description=task.description,
+            parent_task_id=task.parent_task_id,
+            created_by=task.created_by,
+            assigned_to=task.assigned_to,
+            project_id=task.project_id,
+            status=task.status,
+            priority=task.priority,
+            due_date=task.due_date,
+            type=Task_type,
+            estimated_duration=task.estimated_duration
+         )
+        db.add(new_task)
+        db.commit()
+        db.refresh(new_task)
+        return {"message": f"Task created successfully", "task_id": new_task.id}
+    
