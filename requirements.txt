@@ -1,12 +1,17 @@
-Fast API
-uvicorn
-PostgreSQL
-libpq-dev
-psycopg2
+fastapi
+uvicorn[standard]
+
+# Datenbank & ORM
+sqlalchemy
 psycopg2-binary
-SQLAlchemy
-python-dotenv
-Pydantic
+alembic
+
+# Authentifizierung & Sicherheit
+passlib[bcrypt]
 pyjwt
-passlib
+python-dotenv
+
+# Datenvalidierung
+pydantic
+email-validator
 
