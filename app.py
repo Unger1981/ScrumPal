@@ -1,14 +1,16 @@
+from datetime import datetime, timedelta
+import os
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
-import os
-from pydantic_models import RegisterUser, UserCreate, UserLogin, ProjectCreate, ProjectUser, TaskCreate
 from sqlalchemy import select
 from sqlalchemy.orm import Session  
-from datetime import datetime, timedelta
 from Classes import AuthUser, User, Project, project_members, Task, pwd_context
-from database import SessionLocal, init_db, get_db  # Achte darauf, dass init_db hier importiert wird
-from token_functions import create_access_token, verify_token, ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme
+from database import init_db, get_db  # Achte darauf, dass init_db hier importiert wird
+from token_functions import( create_access_token, verify_token,
+ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme)
+from pydantic_models import (RegisterUser, UserCreate, UserLogin,
+ProjectCreate, ProjectUser, TaskCreate)
 
 app = FastAPI()
 
@@ -32,6 +34,7 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
 
 
 @app.post("/login")
+
 def login(user: UserLogin, db: Session = Depends(get_db)):
     """Login and return an access token."""
     db_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
@@ -127,6 +130,7 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
         name=project.name,
         description=project.description,
         product_owner_id=project.user_id, 
+        created_by=project.user_id,
         created_at=datetime.utcnow()
         )
         db.add(new_project)
@@ -141,7 +145,7 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
 
 @app.get("/projects/{user_id}", status_code=200)
 def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all projects."""
+    """Get all projects by user.id. if member or owner of project."""
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -157,7 +161,7 @@ def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session =
 
 @app.delete("/delete_project/{project_id}", status_code=204)
 def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Delete a project by ID."""
+    """Delete a project by ID. Only the product owner can delete the project."""
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -179,7 +183,7 @@ def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Ses
 
 @app.post("/add_user_to_project", status_code=201)
 def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Add a user to a project."""
+    """Add a user to a project. Only the product owner can add users to the project."""
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -226,7 +230,7 @@ def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_sc
 
 @app.delete("/remove_user_from_project", status_code=200)
 def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Remove a user from a project."""
+    """Remove a user from a project. Only the product owner can remove users from the project."""
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -273,7 +277,7 @@ def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oaut
 
 @app.get("/project_members/{project_id}", status_code=200)
 def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all members of a project."""
+    """Get all members of a project. If member or owner of project"""
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -310,6 +314,7 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
     ).first()
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
+    print(db_project.product_owner_id,task.created_by)
     if db_project.product_owner_id == task.created_by and task.type == "Backlog" or task.type == "Sprint":
         try:
             create_task_entity(task.type, task, db)
@@ -319,9 +324,7 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
             raise HTTPException(status_code=500, detail="Error creating task")    
     is_member =db.execute(
         select(project_members).where(
-            project_members.c.user_id == task.created_by,
-            project_members.c.project_id == db_project.id,
-            project_members.c.email == user_info['sub']
+            project_members.c.user_id == task.created_by
         )
     ).first()
     if not is_member:
