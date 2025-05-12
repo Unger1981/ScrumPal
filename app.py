@@ -154,7 +154,7 @@ def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session =
         (Project.members.any(User.id == user_id))
     ).all()
     if not projects:        
-        raise HTTPException(status_code=404, detail="No projects found")
+        raise HTTPException(status_code=404, detail="No projects found for this user")
     projects = [project for project in projects if project.product_owner_id == user_id or user_id in [member.id for member in project.members]]
     return projects
 
@@ -314,31 +314,37 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
     ).first()
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    print(db_project.product_owner_id,task.created_by)
-    if db_project.product_owner_id == task.created_by and task.type == "Backlog" or task.type == "Sprint":
-        try:
+    if db_project.product_owner_id == task.created_by and task.type in ("Backlog", "Sprint"):
+        try:    
             create_task_entity(task.type, task, db)
+            return {"message": "Task created successfully"}
         except Exception as e:
             db.rollback()
             print(f"[ERROR] Task creation failed: {e}")
             raise HTTPException(status_code=500, detail="Error creating task")    
+    user_by_auth_user = db.query(User).filter(
+        user_info["sub"] == User.email,
+        User.id == task.created_by
+    ).first()
+    if not user_by_auth_user:   
+        raise HTTPException(status_code=404, detail="User not assigned to login user")
     is_member =db.execute(
         select(project_members).where(
-            project_members.c.user_id == task.created_by
-        )
+            project_members.c.user_id == task.created_by,
+                )
     ).first()
     if not is_member:
         raise HTTPException(status_code=403, detail="User is not a member of the project or product owner")
-    if is_member and task.type == "Task" and task.parent_task_id is not None:
+    if is_member and user_by_auth_user and task.type == "Task" and task.parent_task_id is not None:
         try:
            create_task_entity(task.type, task, db)
-           return {"message": f"Task created successfully", "task_id": task.id}
+           return {"message": f"Task created successfully"}
         except Exception as e:      
             db.rollback()
             print(f"[ERROR] Task creation failed: {e}")
             raise HTTPException(status_code=500, detail="Error creating task")
     else:
-        raise HTTPException(status_code=403, detail="User is not a member of the project or product owner")
+        raise HTTPException(status_code=403, detail="Wrong Task Type")
     
 
     
@@ -365,6 +371,22 @@ def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = D
         db.rollback()
         print(f"[ERROR] Fetching tasks failed: {e}")
         raise HTTPException(status_code=500, detail="Error fetching tasks")
+
+@app.delete("/delete_task/{task_id}", status_code=204)
+def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Delete a task by ID."""
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    db_task = db.query(Task).filter(
+        Task.id == task_id
+    ).first()
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    db.delete(db_task)
+    db.commit()
+    return {"message": f"Task with ID {task_id} successfully deleted"}    
     
 
 
