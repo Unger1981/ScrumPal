@@ -1,17 +1,17 @@
 fastapi
 uvicorn[standard]
 
-# Datenbank & ORM
+# Database & ORM
 sqlalchemy
 psycopg2-binary
 alembic
 
-# Authentifizierung & Sicherheit
+# Authent & Security
 passlib[bcrypt]
 pyjwt
 python-dotenv
 
-# Datenvalidierung
+# Data Validation
 pydantic
 email-validator
 

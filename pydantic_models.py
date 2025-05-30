@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr 
+from enum import Enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+
 
 
 class RegisterUser(BaseModel):
@@ -31,6 +32,11 @@ class ProjectUser(BaseModel):
     new_user_id: int
     new_user_mail: EmailStr
 
+class TaskType(str, Enum):
+    backlog = "Backlog"
+    sprint = "Sprint"
+    task = "Task"    
+
 class TaskCreate(BaseModel):
     title: str
     description: str
@@ -41,6 +47,8 @@ class TaskCreate(BaseModel):
     status: str = "To Do"
     priority: str = "Normal"
     due_date: datetime = None
-    type: str 
+    type: TaskType
     estimated_duration: int = None  
+
+
    

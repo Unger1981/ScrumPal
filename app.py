@@ -7,17 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session  
 from Classes import AuthUser, User, Project, project_members, Task, pwd_context
 from database import init_db, get_db  # Achte darauf, dass init_db hier importiert wird
-from token_functions import( create_access_token, verify_token,
+from token_functions import( create_access_token, verify_token, blacklist_token,
 ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme)
 from pydantic_models import (RegisterUser, UserCreate, UserLogin,
-ProjectCreate, ProjectUser, TaskCreate)
+ProjectCreate, ProjectUser,TaskType, TaskCreate)
 
 app = FastAPI()
 
 # Init database
 init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
 
-# Login/Register
+# Login/Register/Logout
 
 @app.post("/register",status_code=201)
 def register(user: RegisterUser, db: Session = Depends(get_db)):
@@ -26,10 +26,14 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     hashed_password = pwd_context.hash(user.password)
-    new_user = AuthUser(email=user.email, password_hash=hashed_password)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        new_user = AuthUser(email=user.email, password_hash=hashed_password)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] User registration failed: {e}")
     return {"message": "User registered successfully"}
 
 
@@ -40,7 +44,6 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
     # Token-Daten
     token_data = {
         "sub": db_user.email,
@@ -49,7 +52,18 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(token_data)
     return {"access_token": access_token, "token_type": "bearer"}
 
-# User
+
+@app.post("/logout")
+def logout(token: str = Depends(oauth2_scheme)):
+    """Logout endpoint to blacklist the token."""
+    try:
+        blacklist_token(token)
+    except Exception as e:     
+        print(f"[ERROR] Token blacklisting failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error blacklisting token")
+    return {"message": "Logged out successfully"}
+
+# USER
 
 @app.post("/create_user",status_code=201)
 def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -109,7 +123,7 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
         print(f"[ERROR] User deletion failed: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting user")
 
-# Projects
+# PROJECTS
 
 @app.post("/create_projects", status_code=201)
 def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -175,11 +189,16 @@ def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Ses
     ).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found with necessary permissions")
-    db.delete(db_project)
-    db.commit()
+    try:
+        db.delete(db_project)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Project deletion failed: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting project")    
     return {"message": f"Project with ID {project_id} successfully deleted"}    
     
-    # Project Members Junction Table
+# PROJECT MEMBERS JUNCTION TABLE
 
 @app.post("/add_user_to_project", status_code=201)
 def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -302,6 +321,7 @@ def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db
     
     return members
 
+#TASKS
 
 @app.post("/create_task", status_code=201)          
 def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -314,7 +334,7 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
     ).first()
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if db_project.product_owner_id == task.created_by and task.type in ("Backlog", "Sprint"):
+    if db_project.product_owner_id == task.created_by and task.type in TaskType.__members__.values():
         try:    
             create_task_entity(task.type, task, db)
             return {"message": "Task created successfully"}
@@ -347,8 +367,6 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
         raise HTTPException(status_code=403, detail="Wrong Task Type")
     
 
-    
-    
 @app.get("/tasks/{user_id}", status_code=200)
 def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Get all tasks of a user."""
@@ -372,6 +390,7 @@ def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = D
         print(f"[ERROR] Fetching tasks failed: {e}")
         raise HTTPException(status_code=500, detail="Error fetching tasks")
 
+
 @app.delete("/delete_task/{task_id}", status_code=204)
 def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Delete a task by ID."""
@@ -383,17 +402,19 @@ def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session =
     ).first()
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    db.delete(db_task)
-    db.commit()
+    try:
+        db.delete(db_task)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Task deletion failed: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting task")    
     return {"message": f"Task with ID {task_id} successfully deleted"}    
     
 
-
-    
 def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
-        """Create a new task entity in db dependign on type."""
-        new_task = Task(
+    """Create a new task entity in db dependign on type."""
+    new_task = Task(
             title=task.title,
             description=task.description,
             parent_task_id=task.parent_task_id,
@@ -406,8 +427,8 @@ def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
             type=Task_type,
             estimated_duration=task.estimated_duration
          )
-        db.add(new_task)
-        db.commit()
-        db.refresh(new_task)
-        return {"message": f"Task created successfully", "task_id": new_task.id}
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    return {"message": f"Task created successfully", "task_id": new_task.id}
     

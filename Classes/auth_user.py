@@ -14,7 +14,6 @@ class AuthUser(Base):
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    # Relatio User !!!!! Dont forget next time idiot
     users = relationship('User', back_populates='auth_user') 
 
     def verify_password(self, password: str) -> bool:
