@@ -3,5 +3,6 @@ from .user import User
 from .projects import Project
 from .project_members import project_members
 from .tasks import Task
+from .token import tokens
 
-__all__ = ["AuthUser", "User", "Project", "project_members", "Task"] 
+__all__ = ["AuthUser", "User", "Project", "project_members", "Task", "tokens"] 

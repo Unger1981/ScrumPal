@@ -54,10 +54,10 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 
 
 @app.post("/logout")
-def logout(token: str = Depends(oauth2_scheme)):
+def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Logout endpoint to blacklist the token."""
     try:
-        blacklist_token(token)
+        blacklist_token(token,db)
     except Exception as e:     
         print(f"[ERROR] Token blacklisting failed: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error blacklisting token")
