@@ -20,18 +20,30 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """
     Creates JWT Token.
+    Args:
+        data (dict): The payload data to encode in the JWT.
+        expires_delta (timedelta, optional): The expiration time for the token. Defaults to 120 minutes.
+    Returns:
+        str: The encoded JWT token.
+    Raises:
+        HTTPException: If there is an error during token creation.
     """
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
     return encoded_jwt
 
 
 def verify_token(token: str = Depends(oauth2_scheme)):
     """
     Verifies the JWT token and returns the payload.
+    Args:
+        token (str): The JWT token to verify.
+    Returns:
+        dict: The decoded payload of the JWT token.
+    Raises:
+        HTTPException: If the token is expired, invalid, or already blacklisted.
     """
     if token in blacklisted_tokens:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is already blacklisted")
