@@ -21,7 +21,16 @@ init_db()   #!!! Potential function to check wheater DB exist or not. Clarify wi
 
 @app.post("/register",status_code=201)
 def register(user: RegisterUser, db: Session = Depends(get_db)):
-    """Register a new user."""
+    """Register a new user
+    and store in the database.
+    Args:
+        user (RegisterUser): The user data to register.
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the email is already registered or if there is an error during registration. 
+    Returns:
+        dict: A message indicating successful registration.
+    """
     existing_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
@@ -40,7 +49,15 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
 
 @app.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    """Login and return an access token."""
+    """Login and return an access token.
+    Args:
+        user (UserLogin): The user credentials for login.
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the credentials are invalid or if there is an error during login.
+    Returns:
+        dict: A dictionary containing the access token and token type.
+    """
     db_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -55,7 +72,15 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 
 @app.post("/logout")
 def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Logout endpoint to blacklist the token."""
+    """Logout endpoint to blacklist the token.
+    Args:
+        token (str, optional): The access token to blacklist. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).      
+    Raises:             
+        HTTPException: If the token blacklisting fails.
+    Returns:
+        dict: A message indicating successful logout.
+    """
     try:
         blacklist_token(token,db)
         return {"message": "Logged out successfully"}
@@ -68,7 +93,16 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
 
 @app.post("/create_user",status_code=201)
 def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Create a new user."""
+    """Create a new user.   
+    Args:
+        user (UserCreate): The user data to create.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, or if there is an error during user creation.
+    Returns:
+        dict: A message indicating successful user creation.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
@@ -95,7 +129,15 @@ def create_user(user: UserCreate, token: str = Depends(oauth2_scheme), db: Sessi
 
 @app.get("/users")
 def get_users(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all users."""                
+    """Get all users.   
+    Args:
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, or if there is an error during user retrieval.
+    Returns:
+        list: A list of users.
+    """               
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
@@ -116,7 +158,16 @@ def get_users(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 
 @app.delete("/delete_user/{user_id}")
 def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Delete a user by ID."""
+    """Delete a user by ID. 
+    Args:   
+        user_id (int): The ID of the user to delete.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the user is not found, or if there is an error during user deletion.
+    Returns:
+        dict: A message indicating successful user deletion.
+    """
     user_info = verify_token(token)
     if not user_info:       
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
@@ -138,7 +189,16 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
 
 @app.post("/create_projects", status_code=201)
 def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Create a new project by user.id with ownership."""
+    """Create a new project by user.id with ownership.
+    Args:
+        project (ProjectCreate): The project data to create.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the user is not found, or if there is an error during project creation.
+    Returns:
+        dict: A message indicating successful project creation and the project ID.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -171,7 +231,16 @@ def create_project(project: ProjectCreate, token: str = Depends(oauth2_scheme), 
 
 @app.get("/projects/{user_id}", status_code=200)
 def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all projects by user.id. if member or owner of project."""
+    """Get all projects by user.id. if member or owner of project.  
+    Args:
+        user_id (int): The ID of the user to get projects for.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the user is not found, or if there is an error during project retrieval.
+    Returns:
+        list: A list of projects the user is a member of or the product owner of.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -191,7 +260,16 @@ def get_projects(user_id:int, token: str = Depends(oauth2_scheme), db: Session =
 
 @app.delete("/delete_project/{project_id}", status_code=204)
 def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Delete a project by ID. Only the product owner can delete the project."""
+    """Delete a project by ID. Only the product owner can delete the project.       
+    Args:       
+        project_id (int): The ID of the project to delete.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the project is not found, if the user does not have necessary permissions, or if there is an error during project deletion.
+    Returns:
+        dict: A message indicating successful project deletion.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -219,7 +297,16 @@ def delete_project(project_id: int, token: str = Depends(oauth2_scheme), db: Ses
 
 @app.post("/add_user_to_project", status_code=201)
 def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Add a user to a project. Only the product owner can add users to the project."""
+    """Add a user to a project. Only the product owner can add users to the project.   
+    Args:   
+        project_user (ProjectUser): The project user data containing project ID, owner ID, new user ID, and new user email.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:         
+        HTTPException: If the token is invalid or expired, if the project is not found with necessary permissions, if the user to add is not found, or if there is an error during user addition.
+    Returns:
+        dict: A message indicating successful user addition to the project.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -265,7 +352,16 @@ def add_user_to_project(project_user:ProjectUser, token: str = Depends(oauth2_sc
 
 @app.delete("/remove_user_from_project", status_code=200)
 def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Remove a user from a project. Only the product owner can remove users from the project."""
+    """Remove a user from a project. Only the product owner can remove users from the project.  
+    Args:
+        project_user (ProjectUser): The project user data containing project ID, owner ID, new user ID, and new user email.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).  
+    Raises:
+        HTTPException: If the token is invalid or expired, if the project is not found with necessary permissions, if the user to remove is not found, if the user is not in the project, or if there is an error during user removal.
+    Returns:
+        dict: A message indicating successful user removal from the project.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -301,7 +397,6 @@ def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oaut
                                           )
                     )
         db.commit()
-        db.refresh(db_project)
         return {"message": f"User ID {project_user.new_user_id} removed from project ID {project_user.project_id}"}
     except Exception as e:
         db.rollback()
@@ -313,7 +408,16 @@ def remove_user_from_project(project_user:ProjectUser, token: str = Depends(oaut
 
 @app.get("/project_members/{project_id}", status_code=200)
 def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all members of a project. If member or owner of project"""
+    """Get all members of a project. If member or owner of project.
+    Args:
+        project_id (int): The ID of the project to get members for.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the project is not found, or if there is an error during member retrieval.
+    Returns:
+        list: A list of users who are members of the project.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -340,9 +444,14 @@ def get_project_members(project_id: int, token: str = Depends(oauth2_scheme), db
     
 #TASKS
 
+#REFACTORING NEEDED: TaskType should be used as Enum in TaskCreate  
+#Refactoring needed: SOC 2 routes for owner and member of project
+
 @app.post("/create_task", status_code=201)          
 def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Create a new task."""
+    """Create a new task.
+    REFACTOR
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -386,7 +495,16 @@ def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Sessi
 
 @app.get("/tasks/{user_id}", status_code=200)
 def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Get all tasks of a user."""
+    """Get all tasks of a user.
+    Args:
+        user_id (int): The ID of the user to get tasks for.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the user is not found, or if there is an error during task retrieval.
+    Returns:
+        list: A list of tasks assigned to or created by the user.
+    """
     try:
         user_info = verify_token(token)
         if not user_info:
@@ -407,10 +525,19 @@ def get_tasks(user_id: int, token: str = Depends(oauth2_scheme), db: Session = D
         print(f"[ERROR] Fetching tasks failed: {e}")
         raise HTTPException(status_code=500, detail="Error fetching tasks")
 
-
+# REFACTORING NEEDED: Only MVP mininum functionality implemented
 @app.delete("/delete_task/{task_id}", status_code=204)
 def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Delete a task by ID."""
+    """Delete a task by ID.
+    Args:
+        task_id (int): The ID of the task to delete.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the task is not found, or if there is an error during task deletion.
+    Returns:
+        dict: A message indicating successful task deletion.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -431,8 +558,18 @@ def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session =
     
 
 def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
-    """Create a new task entity in db dependign on type."""
-    new_task = Task(
+    """Create a new task entity in db dependign on type.    
+    Args:
+        Task_type (str): The type of the task to create.
+        task (TaskCreate): The task data to create.
+        db (Session): The database session.
+    Raises:
+        HTTPException: If there is an error during task creation.
+    Returns:
+        dict: A message indicating successful task creation and the task ID.
+    """ 
+    try:
+        new_task = Task(
             title=task.title,
             description=task.description,
             parent_task_id=task.parent_task_id,
@@ -444,9 +581,13 @@ def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
             due_date=task.due_date,
             type=Task_type,
             estimated_duration=task.estimated_duration
-         )
-    db.add(new_task)
-    db.commit()
-    db.refresh(new_task)
-    return {"message": f"Task created successfully", "task_id": new_task.id}
+            )
+        db.add(new_task)
+        db.commit()
+        db.refresh(new_task)
+        return {"message": f"Task created successfully", "task_id": new_task.id}
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Task creation failed: {e}")
+        raise HTTPException(status_code=500, detail="Error creating task in DB")
     
