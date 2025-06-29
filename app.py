@@ -6,18 +6,19 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session  
 from Classes import AuthUser, User, Project, project_members, Task, pwd_context
-from database import init_db, get_db  # Achte darauf, dass init_db hier importiert wird
+from database import init_db, get_db 
 from token_functions import( create_access_token, verify_token, blacklist_token,
 ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme)
+from services import create_task_entity, validate_password
 from pydantic_models import (RegisterUser, UserCreate, UserLogin,
-ProjectCreate, ProjectUser,TaskType, TaskCreate)
+ProjectCreate, ProjectUser,TaskType, TaskCreate, PasswordChangeRequest)
 
 app = FastAPI()
 
 # Init database
 init_db()   #!!! Potential function to check wheater DB exist or not. Clarify with Michal
 
-# Login/Register/Logout
+# Login/Register/Logout/Administration AuthUser
 
 @app.post("/register",status_code=201)
 def register(user: RegisterUser, db: Session = Depends(get_db)):
@@ -34,6 +35,8 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     existing_user = db.query(AuthUser).filter(AuthUser.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+    if not validate_password(user.password):	
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password does not meet complexity requirements")
     hashed_password = pwd_context.hash(user.password)
     try:
         new_user = AuthUser(email=user.email, password_hash=hashed_password)
@@ -88,6 +91,26 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         print(f"[ERROR] Token blacklisting failed: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error blacklisting token")
     
+@app.post("/change_password")
+def change_password(Body: PasswordChangeRequest, token:str =Depends (oauth2_scheme), db: Session = Depends(get_db)):
+    user_info = verify_token(token)
+    if not user_info:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    if not validate_password(Body.password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password does not meet complexity requirements")
+    hashed_password = pwd_context.hash(Body.password)
+    db_auth_user = db.query(AuthUser).filter(AuthUser.email == user_info['sub']).first()
+    if not db_auth_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AuthUser not found in DB")
+    try:
+        db_auth_user.password_hash = hashed_password
+        db.commit()
+        return {"message": "Password changed successfully"}
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Password change failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error changing password in DB")
+
 
 # USER
 
@@ -185,6 +208,7 @@ def delete_user(user_id: int, token: str = Depends(oauth2_scheme), db: Session =
         db.rollback()
         print(f"[ERROR] User deletion failed: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting user")
+
 # PROJECTS
 
 @app.post("/create_projects", status_code=201)
@@ -557,37 +581,3 @@ def delete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session =
      
     
 
-def create_task_entity(Task_type: str, task: TaskCreate, db: Session):
-    """Create a new task entity in db dependign on type.    
-    Args:
-        Task_type (str): The type of the task to create.
-        task (TaskCreate): The task data to create.
-        db (Session): The database session.
-    Raises:
-        HTTPException: If there is an error during task creation.
-    Returns:
-        dict: A message indicating successful task creation and the task ID.
-    """ 
-    try:
-        new_task = Task(
-            title=task.title,
-            description=task.description,
-            parent_task_id=task.parent_task_id,
-            created_by=task.created_by,
-            assigned_to=task.assigned_to,
-            project_id=task.project_id,
-            status=task.status,
-            priority=task.priority,
-            due_date=task.due_date,
-            type=Task_type,
-            estimated_duration=task.estimated_duration
-            )
-        db.add(new_task)
-        db.commit()
-        db.refresh(new_task)
-        return {"message": f"Task created successfully", "task_id": new_task.id}
-    except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Task creation failed: {e}")
-        raise HTTPException(status_code=500, detail="Error creating task in DB")
-    

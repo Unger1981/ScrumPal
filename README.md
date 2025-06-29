@@ -25,7 +25,7 @@ python -m venv venv
 source venv/bin/activate  # or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 
-!!! Docker image provided soon !!!
+!!! Docker-image provided soon !!!
 
 
 
@@ -76,16 +76,18 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 https://github.com/Unger1981 😃  📞📞📞📞
 
 
-## 🚧 Further Implementations
+🚧 Further Implementations
+Feature Expansion
+Add more features for updating users, projects, and tasks, including roles, permissions, and advanced project workflows.
 
-1. **Testing**  
-   Add automated unit tests, integration tests, and end-to-end tests to ensure reliability and catch regressions early.
+Automated Testing
+Implement unit tests, integration tests, and end-to-end tests to ensure reliability and catch regressions early.
 
-2. **Email Client for Password Reset (OTP)**  
-   Implement a secure email service to handle password reset flows, including generating and verifying One-Time Passwords (OTP).
+Email Client for Password Reset (OTP)
+Add a secure email service for password reset flows, including generating and verifying One-Time Passwords (OTP).
 
-3. **Two-Factor Authentication (2FA)**  
-   Add optional 2FA for stronger account security, e.g., via authenticator apps or SMS.
+Two-Factor Authentication (2FA)
+Provide optional 2FA for stronger account security, using authenticator apps or SMS.
 
-4. **Docker**  
-   Containerize the application with Docker for easier deployment and environment consistency.
+Docker Containerization
+Containerize the application with Docker for consistent development, testing, and deployment environments.

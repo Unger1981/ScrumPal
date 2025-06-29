@@ -50,5 +50,6 @@ class TaskCreate(BaseModel):
     type: TaskType
     estimated_duration: int = None  
 
-
+class PasswordChangeRequest(BaseModel):
+    password: str
    
