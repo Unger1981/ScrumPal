@@ -93,6 +93,16 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     
 @app.post("/change_password")
 def change_password(Body: PasswordChangeRequest, token:str =Depends (oauth2_scheme), db: Session = Depends(get_db)):
+    """Change the password of the authenticated user.
+    Args:
+        Body (PasswordChangeRequest): The new password to set.
+        token (str, optional): The access token for authentication. Defaults to Depends(oauth2_scheme).
+        db (Session, optional): The database session. Defaults to Depends(get_db).
+    Raises:
+        HTTPException: If the token is invalid or expired, if the password does not meet complexity requirements, if the AuthUser is not found, or if there is an error during password change.
+    Returns:
+        dict: A message indicating successful password change.
+    """
     user_info = verify_token(token)
     if not user_info:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")

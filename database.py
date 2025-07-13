@@ -23,9 +23,8 @@ def init_db():
 
 # Dependency for db !!!!! Refactor to database.py soon
 def get_db():
-    """Get database session."""
-    db = SessionLocal()  
+    db = SessionLocal()
     try:
-        return db 
+        yield db  
     finally:
-        db.close()  
+        db.close() 

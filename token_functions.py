@@ -58,7 +58,7 @@ def verify_token(token: str = Depends(oauth2_scheme)):
 
 def blacklist_token(token: str, db: Session):
     """
-    Blacklists a token by adding it to a blacklist db.
+    Blacklists a token by adding it to a blacklist db table.
     If Token cant be stored in DB, it will be stored in a temporary blacklist.
     This function checks if the token is already blacklisted and stores it in the database if not.
     If the token is already blacklisted, it raises an HTTPException.
